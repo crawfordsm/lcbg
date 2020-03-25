@@ -1,2 +1,0 @@
-# lcbg
-Software for LCBGs
