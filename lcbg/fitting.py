@@ -3,7 +3,9 @@ import os
 import numpy as np
 
 from astropy.stats import mad_std, gaussian_sigma_to_fwhm
-from astropy.modeling import models, fitting, Parameter
+from astropy.modeling import models, fitting, functional_models, Parameter, custom_model
+
+
 
 from matplotlib import pyplot as plt
 
@@ -167,3 +169,35 @@ def plot_fit(image, model, vmin=None, vmax=None):
 
     return fig, [ax0, ax1, ax2, ax3]
 
+
+@custom_model
+def Nuker2D(x, y, amplitude=1, r_eff=1, x_0=0, y_0=0, a=1, b=2, g=0, ellip=0, theta=0):
+    A, B = 1 * r_eff, (1 - ellip) * r_eff
+    cos_theta, sin_theta = np.cos(theta), np.sin(theta)
+    x_maj = (x - x_0) * cos_theta + (y - y_0) * sin_theta
+    x_min = -(x - x_0) * sin_theta + (y - y_0) * cos_theta
+    r = np.sqrt((x_maj / A) ** 2 + (x_min / B) ** 2)
+
+    return 2 ** ((b - g) / a) * amplitude * (r_eff / r) ** (g) * (1 + (r / r_eff) ** a) ** ((g - b) / a)
+
+
+@custom_model
+def Moffat2D(x, y, amplitude=1.0, x_0=0.0, y_0=0.0, gamma=1.0, alpha=1.0):
+    """Two dimensional Moffat function."""
+    rr_gg = ((x - x_0) ** 2 + (y - y_0) ** 2) / gamma ** 2
+    return amplitude * (1 + rr_gg) ** (-alpha)
+
+
+@custom_model
+def EllipMoffat2D(x, y, amplitude=1.0, x_0=0.0, y_0=0.0, gamma=1.0, alpha=1.0, ellip=0, theta=0, r=1):
+    """Two dimensional Moffat function."""
+
+    a, b = 1 * r, (1 - ellip) * r
+    cos_theta, sin_theta = np.cos(theta), np.sin(theta)
+    x_maj = (x - x_0) * cos_theta + (y - y_0) * sin_theta
+    x_min = -(x - x_0) * sin_theta + (y - y_0) * cos_theta
+    z = np.sqrt((x_maj / a) ** 2 + (x_min / b) ** 2)
+
+    rr_gg = (z) / gamma ** 2
+
+    return amplitude * (1 + rr_gg) ** (-alpha)

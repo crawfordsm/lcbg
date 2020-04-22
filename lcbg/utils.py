@@ -2,8 +2,7 @@ import os
 
 import numpy as np
 
-from astropy.stats import mad_std, gaussian_sigma_to_fwhm
-from astropy.modeling import models, fitting
+from astropy.stats import gaussian_sigma_to_fwhm
 
 from matplotlib import pyplot as plt
 
@@ -176,5 +175,10 @@ def measure_fwhm(image, plot=True, printout=True):
     return np.array([x_fwhm, y_fwhm])
 
 
+def plot_apertures(image, apertures, vmin=None, vmax=None, color='white'):
+    plt.imshow(image, cmap='Greys_r', vmin=vmin, vmax=vmax)
+    plt.title('Apertures')
 
+    for aperture in apertures:
+        aperture.plot(axes=plt.gca(), color=color, lw=1.5)
 
