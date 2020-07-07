@@ -3,10 +3,23 @@ import os
 import numpy as np
 
 from astropy.stats import gaussian_sigma_to_fwhm
+from astropy.wcs.utils import proj_plane_pixel_scales
+from astropy import units as u
 
 from matplotlib import pyplot as plt
 
 from .fitting import fit_gaussian2d, plot_fit
+
+
+def angular_to_pixel(angular_diameter, wcs):
+    pixel_scales = proj_plane_pixel_scales(wcs)
+    assert np.allclose(*pixel_scales)
+    pixel_scale = pixel_scales[0] * wcs.wcs.cunit[0] / u.pix
+
+    pixel_size = angular_diameter / pixel_scale.to(angular_diameter.unit / u.pix)
+    pixel_size = pixel_size.value
+
+    return pixel_size
 
 
 def cutout(image, x, y, dx, dy=None, vmin=None, vmax=None):
