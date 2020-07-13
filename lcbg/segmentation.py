@@ -38,6 +38,15 @@ def plot_segment_residual(segm, image, vmin=None, vmax=None):
     plt.imshow(temp, vmin=vmin, vmax=vmax)
 
 
+def get_source_position(obj):
+    """Return max x, y value of a SourceProperties or catalog row"""
+    if isinstance(obj, SourceProperties):
+        x, y = obj.maxval_xpos.value, obj.maxval_ypos.value
+    else:
+        x, y = obj['maxval_xpos'], obj['maxval_ypos']
+    return x, y
+
+
 def make_kernel(fwhm, kernel_size):
     sigma = fwhm * gaussian_fwhm_to_sigma
     kernel = Gaussian2DKernel(sigma, x_size=kernel_size, y_size=kernel_size)

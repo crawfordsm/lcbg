@@ -3,15 +3,38 @@ import numpy as np
 from astropy.modeling import models, fitting, functional_models, Parameter, custom_model
 from astropy import units as u
 
-from lcbg.utils import cutout, measure_fwhm, plot_apertures
-from lcbg.fitting import plot_fit, fit_model, model_subtract, Moffat2D, Nuker2D
-
 from matplotlib import pyplot as plt
+
+from photutils import aperture_photometry, CircularAperture, CircularAnnulus, EllipticalAnnulus, EllipticalAperture
 
 import ipywidgets as widgets
 from IPython.display import display
 
-plt.rcParams['figure.figsize'] = [12, 12]
+from .utils import cutout
+from .segmentation import segm_mask, masked_segm_image
+from .fitting import plot_fit, fit_model, model_subtract, Moffat2D, Nuker2D
+
+
+def plot_apertures(image, apertures, vmin=None, vmax=None, color='white'):
+    plt.imshow(image, cmap='Greys_r', vmin=vmin, vmax=vmax)
+    plt.title('Apertures')
+
+    for aperture in apertures:
+        aperture.plot(axes=plt.gca(), color=color, lw=1.5)
+
+
+def calculate_photometic_density(r_list, flux_list, e=1., theta=0.):
+    density = []
+
+    last_flux = 0
+    last_area = 0
+    for r, flux in zip(r_list, flux_list):
+        aperture = radial_elliptical_aperture((0, 0), r, e=e, theta=theta)
+        area = aperture.area
+        density.append((flux - last_flux) / (area - last_area))
+        last_area, last_flux = area, flux
+
+    return density
 
 
 def flux_to_abmag(flux, header):
@@ -29,7 +52,7 @@ def flux_to_abmag(flux, header):
     return -2.5 * np.log10(flux) + ABMAG_ZPT
 
 
-def order_cat(cat):
+def order_cat(cat, key='area'):
     """
     Sort a catalog by largest area and return the argsort
     Parameters
@@ -37,17 +60,117 @@ def order_cat(cat):
     cat : `SourceCatalog` instance
         A `SourceCatalog` instance containing the properties of each
         source.
+    key : string
+        Key to sort
 
     Returns
     -------
     output : list
         A list of catalog indices ordered by largest area
     """
-    table = cat.to_table()['area']
+    table = cat.to_table()[key]
     order_all = table.argsort()
     order_all = list(reversed(order_all))
     return order_all
 
+
+def radial_elliptical_aperture(position, r, e=1., theta=0.):
+    """
+    Helper function given a radius, elongation and theta,
+    will make an elliptical aperture.
+
+    Parameters
+    ----------
+    position : tuple
+        (x, y) coords for center of aperture
+    r : int or float
+        Semi-major radius of the aperture
+    e : float
+        Elongation
+    theta : float
+        Orientation in rad
+
+    Returns
+    -------
+    EllipticalAperture
+    """
+    a, b = r, r / e
+    return EllipticalAperture(position, a, b, theta=theta)
+
+
+def radial_elliptical_annulus(position, r, dr, e=1., theta=0.):
+    """
+    Helper function given a radius, elongation and theta,
+    will make an elliptical aperture.
+
+    Parameters
+    ----------
+    position : tuple
+        (x, y) coords for center of aperture
+    r : int or float
+        Semi-major radius of the inner ring
+    dr : int or float
+        Thickness of annulus (outer ring = r + dr).
+    e : float
+        Elongation
+    theta : float
+        Orientation in rad
+
+    Returns
+    -------
+    EllipticalAnnulus
+    """
+
+    a_in, b_in = r, r / e
+    a_out, b_out = r + dr, (r + dr) / e
+
+    return EllipticalAnnulus(position, a_in, a_out, b_out, theta=theta)
+
+def photometry_step(position, r_list, image, e=1., theta=0., annulus_dr=5,
+                    plot=False, subtract_bg=True, return_areas=False):
+
+    # Estimate background
+    bg_density = None
+    if subtract_bg:
+        annulus = radial_elliptical_annulus(position, max(r_list), annulus_dr, e=e, theta=theta)
+        bg_density = annulus.do_photometry(image.data)[0][0] / annulus.area
+
+    aperture_photometry_row = []
+    aperture_area_row = []
+
+    if plot:
+        f, ax = plt.subplots(1, 1)
+        ax.imshow(image.data, vmax=image.data.mean())
+    for i, r in enumerate(r_list):
+
+        aperture = radial_elliptical_aperture(position, r, e=e, theta=theta)
+        aperture_area = aperture.area
+
+        photometric_sum = aperture.do_photometry(image.data)[0][0]
+
+        photometric_value = photometric_sum
+        if subtract_bg:
+            photometric_bkg = aperture_area * bg_density
+            photometric_value -= photometric_bkg
+
+        if np.isnan(photometric_value):
+            raise Exception("Nan photometric_value")
+
+        if plot:
+            aperture.plot(ax, color='r')
+
+        aperture_photometry_row.append(photometric_value)
+        aperture_area_row.append(aperture_area)
+
+    if plot:
+        if subtract_bg:
+            annulus.plot(ax, color='w', linestyle='--')
+        plt.show()
+
+    if return_areas:
+        return aperture_photometry_row, aperture_area_row
+    else:
+        return aperture_photometry_row
 
 
 def remove_fitted_sources(image, image_residual, cat,

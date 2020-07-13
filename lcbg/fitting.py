@@ -6,8 +6,15 @@ from astropy.stats import mad_std, gaussian_sigma_to_fwhm
 from astropy.modeling import models, fitting, functional_models, Parameter, custom_model
 
 
-
 from matplotlib import pyplot as plt
+
+
+# Make new image
+def model_to_image(size, model):
+    y_arange, x_arange = np.mgrid[
+                         int(model.y_0.value) - size:int(model.y_0.value) + size,
+                         int(model.x_0.value) - size:int(model.x_0.value) + size, ]
+    return model(x_arange, y_arange)
 
 
 def fit_model(image, model, maxiter=5000, epsilon=1e-10):
