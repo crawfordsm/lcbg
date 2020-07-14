@@ -48,14 +48,18 @@ def get_interpolated_values(x, y, num=5000, kind='cubic'):
     return x_new, y_new
 
 
-def closest_value_index(value, array):
+def closest_value_index(value, array, growing=False):
     """Return first index closes to value"""
-    idx_list = np.where(array <= value)[0]
+
+    if not growing:
+        idx_list = np.where(array <= value)[0]
+    elif growing:
+        idx_list = np.where(array >= value)[0]
 
     idx = None
     if idx_list.size > 0:
         idx = idx_list[0]
-        idx = (array[:idx + 1] - value).argmin()
+        idx = abs(array[:idx + 1] - value).argmin()
     return idx
 
 

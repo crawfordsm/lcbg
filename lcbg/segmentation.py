@@ -47,6 +47,19 @@ def get_source_position(obj):
     return x, y
 
 
+def get_source_e(obj):
+    """ Return SourceProperties elongation"""
+    return obj.elongation.value if isinstance(obj, SourceProperties) else obj['elongation']
+
+def get_source_ellip(obj):
+    """ Return SourceProperties ellipticity"""
+    return obj.ellipticity.value if isinstance(obj, SourceProperties) else obj['ellipticity']
+
+def get_source_theta(obj):
+    """ Return SourceProperties orientation in rad"""
+    return obj.orientation.to('rad').value if isinstance(obj, SourceProperties) else np.deg2rad(obj['orientation'])
+
+
 def make_kernel(fwhm, kernel_size):
     sigma = fwhm * gaussian_fwhm_to_sigma
     kernel = Gaussian2DKernel(sigma, x_size=kernel_size, y_size=kernel_size)

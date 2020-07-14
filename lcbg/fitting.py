@@ -10,22 +10,41 @@ from matplotlib import pyplot as plt
 
 
 # Make new image
-def model_to_image(size, model):
+def model_to_image(x, y, size, model):
     y_arange, x_arange = np.mgrid[
-                         int(model.y_0.value) - size:int(model.y_0.value) + size,
-                         int(model.x_0.value) - size:int(model.x_0.value) + size, ]
+                         int(x) - size//2:int(y) + size//2,
+                         int(x) - size//2:int(x) + size//2, ]
     return model(x_arange, y_arange)
+
+
+def fit_plane(image, maxiter=5000, epsilon=1e-10):
+    model = models.Planar2D(slope_x=0., slope_y=0, intercept=0) + models.Const2D(0)
+
+    # Make x and y grid to fit to
+    y_arange, x_arange = np.where(~(np.isnan(image)))
+
+    z = image[(y_arange, x_arange)]
+
+    # Fit model to grid
+    fit = fitting.LevMarLSQFitter()  # fitting.LinearLSQFitter()
+    fitted_line = fit(model, x_arange, y_arange, z, maxiter=5000, epsilon=1e-10)
+
+    return fitted_line, fit
+
 
 
 def fit_model(image, model, maxiter=5000, epsilon=1e-10):
     # Make x and y grid to fit to
-    y_arange, x_arange = np.mgrid[:image.shape[0], :image.shape[1]]
+    y_arange, x_arange = np.where(~(np.isnan(image)))
+
+    z = image[(y_arange, x_arange)]
 
     # Fit model to grid
     fit = fitting.LevMarLSQFitter()
-    fitted_line = fit(model, x_arange, y_arange, image, maxiter=maxiter, epsilon=epsilon)
+    fitted_line = fit(model, x_arange, y_arange, z, maxiter=maxiter, epsilon=epsilon)
 
     return fitted_line, fit
+
 
 def fit_sersic2d(image, ellip=0.5, theta=0, fixed={}):
     # Estimate center of target

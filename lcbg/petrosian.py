@@ -85,7 +85,7 @@ def calculate_r_total_flux(r_list, area_list, flux_list, eta=0.2):
     return r_petrosian * 2
 
 
-def calculate_r_half_light(r_list, area_list, flux_list, eta=0.2):
+def fraction_flux_to_r(r_list, area_list, flux_list, fraction=0.5, eta=0.2):
     r_total_flux = calculate_r_total_flux(r_list, area_list, flux_list, eta=eta)
 
     if r_total_flux > max(r_list):
@@ -93,9 +93,16 @@ def calculate_r_half_light(r_list, area_list, flux_list, eta=0.2):
 
     f = interp1d(r_list, flux_list, kind='cubic')
     total_flux = f(r_total_flux)
-    half_flux = total_flux / 2.
+    fractional_flux = total_flux * fraction
 
     r_list_new, flux_list_new = get_interpolated_values(r_list, flux_list)
 
-    idx = abs(flux_list_new - half_flux).argmin()
+    # idx = abs(flux_list_new - fractional_flux).argmin()
+    idx = closest_value_index(fractional_flux, flux_list_new, growing=True)
     return None if idx is None else r_list_new[idx]
+
+
+def calculate_r_half_light(r_list, area_list, flux_list, eta=0.2):
+    return fraction_flux_to_r(r_list, area_list, flux_list, fraction=0.5, eta=eta)
+
+
