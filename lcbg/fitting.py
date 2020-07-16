@@ -12,7 +12,7 @@ from matplotlib import pyplot as plt
 # Make new image
 def model_to_image(x, y, size, model):
     y_arange, x_arange = np.mgrid[
-                         int(x) - size//2:int(y) + size//2,
+                         int(y) - size//2:int(y) + size//2,
                          int(x) - size//2:int(x) + size//2, ]
     return model(x_arange, y_arange)
 
@@ -149,7 +149,7 @@ def plot_fit(image, model, vmin=None, vmax=None):
     # ---------------
 
     residuals = image - model(x_arange, y_arange)
-    residuals[np.where(residuals < 0)] = 0.
+    # residuals[np.where(residuals < 0)] = 0.
     ax1 = fig.add_subplot(222)
     ax1.imshow(residuals, vmin=vmin, vmax=vmax)
 
