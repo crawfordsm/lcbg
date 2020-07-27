@@ -4,10 +4,14 @@ import numpy as np
 
 from astropy.stats import mad_std, gaussian_sigma_to_fwhm
 from astropy.modeling import models, fitting, functional_models, Parameter, custom_model
-
+from astropy.modeling.optimizers import DEFAULT_ACC, DEFAULT_EPS, DEFAULT_MAXITER
 
 from matplotlib import pyplot as plt
 
+
+def print_model_params(model):
+    for param, value in zip(model.param_names, model.parameters):
+        print("{:0.4f}\t{}".format(value,param))
 
 # Make new image
 def model_to_image(x, y, size, model):
@@ -32,8 +36,7 @@ def fit_plane(image, maxiter=5000, epsilon=1e-10):
     return fitted_line, fit
 
 
-
-def fit_model(image, model, maxiter=5000, epsilon=1e-10):
+def fit_model(image, model, maxiter=5000, epsilon=DEFAULT_EPS, acc=DEFAULT_ACC):
     # Make x and y grid to fit to
     y_arange, x_arange = np.where(~(np.isnan(image)))
 
@@ -41,7 +44,7 @@ def fit_model(image, model, maxiter=5000, epsilon=1e-10):
 
     # Fit model to grid
     fit = fitting.LevMarLSQFitter()
-    fitted_line = fit(model, x_arange, y_arange, z, maxiter=maxiter, epsilon=epsilon)
+    fitted_line = fit(model, x_arange, y_arange, z, maxiter=maxiter, epsilon=epsilon, acc=acc)
 
     return fitted_line, fit
 

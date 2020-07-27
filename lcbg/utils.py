@@ -31,6 +31,18 @@ def angular_to_pixel(angular_diameter, wcs):
     return pixel_size
 
 
+def pixel_to_angular(pixel_size, wcs):
+    pixel_scales = proj_plane_pixel_scales(wcs)
+    assert np.allclose(*pixel_scales)
+    pixel_scale = pixel_scales[0] * wcs.wcs.cunit[0] / u.pix
+
+    if not hasattr(pixel_size, 'unit'):
+        pixel_size = pixel_size * u.pix
+
+    angular_diameter = pixel_size * pixel_scale.to(u.arcsec / u.pix)
+    return angular_diameter
+
+
 def elliptical_area_to_r(area, e):
     a = np.sqrt(e * area / (np.pi))
     b = a / e
