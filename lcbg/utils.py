@@ -1,12 +1,88 @@
 import os
+import re
 
 import numpy as np
 
+from scipy.interpolate import interp1d
+
 from astropy.stats import gaussian_sigma_to_fwhm
+from astropy.wcs.utils import proj_plane_pixel_scales
+from astropy import units as u
 
 from matplotlib import pyplot as plt
 
 from .fitting import fit_gaussian2d, plot_fit
+
+
+def natural_sort(l):
+    convert = lambda text: int(text) if text.isdigit() else text.lower()
+    alphanum_key = lambda key: [ convert(c) for c in re.split('([0-9]+)', key) ]
+    return sorted(l, key = alphanum_key)
+
+
+def angular_to_pixel(angular_diameter, wcs):
+    pixel_scales = proj_plane_pixel_scales(wcs)
+    assert np.allclose(*pixel_scales)
+    pixel_scale = pixel_scales[0] * wcs.wcs.cunit[0] / u.pix
+
+    pixel_size = angular_diameter / pixel_scale.to(angular_diameter.unit / u.pix)
+    pixel_size = pixel_size.value
+
+    return pixel_size
+
+
+def pixel_to_angular(pixel_size, wcs):
+    pixel_scales = proj_plane_pixel_scales(wcs)
+    assert np.allclose(*pixel_scales)
+    pixel_scale = pixel_scales[0] * wcs.wcs.cunit[0] / u.pix
+
+    if not hasattr(pixel_size, 'unit'):
+        pixel_size = pixel_size * u.pix
+
+    angular_diameter = pixel_size * pixel_scale.to(u.arcsec / u.pix)
+    return angular_diameter
+
+
+def elliptical_area_to_r(area, e):
+    a = np.sqrt(e * area / (np.pi))
+    b = a / e
+    return a, b
+
+
+def circle_area_to_r(area):
+    return np.sqrt(area / (np.pi))
+
+
+def get_interpolated_values(x, y, num=5000, kind='cubic'):
+    f = interp1d(x, y, kind=kind)
+    x_new = np.linspace(min(x), max(x), num=num, endpoint=True)
+    y_new = f(x_new)
+    return x_new, y_new
+
+
+def closest_value_index(value, array, growing=False):
+    """Return first index closes to value"""
+
+    if not growing:
+        idx_list = np.where(array <= value)[0]
+    elif growing:
+        idx_list = np.where(array >= value)[0]
+
+    idx = None
+    if idx_list.size > 0:
+        idx = idx_list[0]
+        idx = abs(array[:idx + 1] - value).argmin()
+    return idx
+
+
+def plot_target(position, image, size, vmin=None, vmax=None):
+    x, y = position
+    if not isinstance(image, np.ndarray):
+        image = image.data
+    plt.imshow(image, vmin=vmin, vmax=vmax)
+    plt.plot(x, y, '+', c='r', label='Target')
+    plt.xlim(x-size, x+size)
+    plt.ylim(y-size, y+size)
 
 
 def cutout(image, x, y, dx, dy=None, vmin=None, vmax=None):
@@ -174,11 +250,4 @@ def measure_fwhm(image, plot=True, printout=True):
 
     return np.array([x_fwhm, y_fwhm])
 
-
-def plot_apertures(image, apertures, vmin=None, vmax=None, color='white'):
-    plt.imshow(image, cmap='Greys_r', vmin=vmin, vmax=vmax)
-    plt.title('Apertures')
-
-    for aperture in apertures:
-        aperture.plot(axes=plt.gca(), color=color, lw=1.5)
 

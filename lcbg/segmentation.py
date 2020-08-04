@@ -1,8 +1,11 @@
+from copy import deepcopy
+
 import numpy as np
 
 from photutils import detect_threshold
 from photutils import deblend_sources
 from photutils import detect_sources
+from photutils.segmentation.properties import SourceProperties
 
 from astropy.convolution import Gaussian2DKernel
 from astropy.stats import gaussian_fwhm_to_sigma
@@ -35,11 +38,95 @@ def plot_segment_residual(segm, image, vmin=None, vmax=None):
     plt.imshow(temp, vmin=vmin, vmax=vmax)
 
 
+def get_source_position(obj):
+    """Return max x, y value of a SourceProperties or catalog row"""
+    if isinstance(obj, SourceProperties):
+        x, y = obj.maxval_xpos.value, obj.maxval_ypos.value
+    else:
+        x, y = obj['maxval_xpos'], obj['maxval_ypos']
+    return x, y
+
+
+def get_source_e(obj):
+    """ Return SourceProperties elongation"""
+    return obj.elongation.value if isinstance(obj, SourceProperties) else obj['elongation']
+
+def get_source_ellip(obj):
+    """ Return SourceProperties ellipticity"""
+    return obj.ellipticity.value if isinstance(obj, SourceProperties) else obj['ellipticity']
+
+def get_source_theta(obj):
+    """ Return SourceProperties orientation in rad"""
+    return obj.orientation.to('rad').value if isinstance(obj, SourceProperties) else np.deg2rad(obj['orientation'])
+
+
 def make_kernel(fwhm, kernel_size):
     sigma = fwhm * gaussian_fwhm_to_sigma
     kernel = Gaussian2DKernel(sigma, x_size=kernel_size, y_size=kernel_size)
     kernel.normalize()
     return kernel
+
+
+def segm_mask(obj, segm, mask_background=False):
+    """
+    Given a segmentaton and a target with an ID, returns a mask
+    with all other sources masked in the original image.
+
+    Parameters
+    ----------
+    obj : int or photutils.segmentation.properties.SourceProperties
+        The catalog object for the target or id of target in the segmentation object
+    segm : photutils.segmentation.core.SegmentationImage
+        Segmentation image
+    mask_background : bool
+        Option to also mask out all the un-segmented background pixels.
+
+    Returns
+    -------
+    mask : bool array
+    """
+
+    if isinstance(obj, SourceProperties):
+        obj = obj.id
+
+    mask = (segm.data == obj)
+    if not mask_background:
+        mask = ((segm.data == 0) | mask)
+    return mask
+
+
+def masked_segm_image(obj, image, segm, fill=None, mask_background=False):
+    """
+    Returns a masked image of the original image by masking out other sources
+    Parameters
+    ----------
+    obj : int or photutils.segmentation.properties.SourceProperties
+        The catalog object for the target or id of target in the segmentation object
+    image : CCDData or array
+        Image to mask
+    segm : photutils.segmentation.core.SegmentationImage
+        Segmentation image
+    fill : float
+        Fill in the masked pixels with this value
+    mask_background : bool
+        Option to also mask out all the un-segmented background pixels.
+
+    Returns
+    -------
+    masked_image : CCDData or array
+    """
+
+    fill = np.nan if fill is None else fill
+    mask = segm_mask(obj, segm, mask_background)
+
+    masked_image = deepcopy(image)
+
+    if isinstance(masked_image, np.ndarray):
+        masked_image[np.invert(mask)] = fill
+    else:
+        masked_image.data[np.invert(mask)] = fill
+
+    return masked_image
 
 
 def make_segments(image, npixels=None, nsigma=3., fwhm=8., kernel_size=4):

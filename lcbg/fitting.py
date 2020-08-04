@@ -4,21 +4,50 @@ import numpy as np
 
 from astropy.stats import mad_std, gaussian_sigma_to_fwhm
 from astropy.modeling import models, fitting, functional_models, Parameter, custom_model
-
-
+from astropy.modeling.optimizers import DEFAULT_ACC, DEFAULT_EPS, DEFAULT_MAXITER
 
 from matplotlib import pyplot as plt
 
 
-def fit_model(image, model, maxiter=5000, epsilon=1e-10):
+def print_model_params(model):
+    for param, value in zip(model.param_names, model.parameters):
+        print("{:0.4f}\t{}".format(value,param))
+
+# Make new image
+def model_to_image(x, y, size, model):
+    y_arange, x_arange = np.mgrid[
+                         int(y) - size//2:int(y) + size//2,
+                         int(x) - size//2:int(x) + size//2, ]
+    return model(x_arange, y_arange)
+
+
+def fit_plane(image, maxiter=5000, epsilon=1e-10):
+    model = models.Planar2D(slope_x=0., slope_y=0, intercept=0) + models.Const2D(0)
+
     # Make x and y grid to fit to
-    y_arange, x_arange = np.mgrid[:image.shape[0], :image.shape[1]]
+    y_arange, x_arange = np.where(~(np.isnan(image)))
+
+    z = image[(y_arange, x_arange)]
+
+    # Fit model to grid
+    fit = fitting.LevMarLSQFitter()  # fitting.LinearLSQFitter()
+    fitted_line = fit(model, x_arange, y_arange, z, maxiter=5000, epsilon=1e-10)
+
+    return fitted_line, fit
+
+
+def fit_model(image, model, maxiter=5000, epsilon=DEFAULT_EPS, acc=DEFAULT_ACC):
+    # Make x and y grid to fit to
+    y_arange, x_arange = np.where(~(np.isnan(image)))
+
+    z = image[(y_arange, x_arange)]
 
     # Fit model to grid
     fit = fitting.LevMarLSQFitter()
-    fitted_line = fit(model, x_arange, y_arange, image, maxiter=maxiter, epsilon=epsilon)
+    fitted_line = fit(model, x_arange, y_arange, z, maxiter=maxiter, epsilon=epsilon, acc=acc)
 
     return fitted_line, fit
+
 
 def fit_sersic2d(image, ellip=0.5, theta=0, fixed={}):
     # Estimate center of target
@@ -123,7 +152,7 @@ def plot_fit(image, model, vmin=None, vmax=None):
     # ---------------
 
     residuals = image - model(x_arange, y_arange)
-    residuals[np.where(residuals < 0)] = 0.
+    # residuals[np.where(residuals < 0)] = 0.
     ax1 = fig.add_subplot(222)
     ax1.imshow(residuals, vmin=vmin, vmax=vmax)
 
