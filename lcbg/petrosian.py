@@ -76,10 +76,11 @@ def discrete_petrosian_r(r_list, area_list, flux_list, eta=0.2):
     return r_petrosian
 
 
-def calculate_r_total_flux(r_list, area_list, flux_list, eta=0.2):
+def calculate_r_total_flux(r_list, area_list, flux_list, eta=0.2, verbose=False):
     r_petrosian = calculate_petrosian_r(r_list, area_list, flux_list, eta=eta)
     if r_petrosian is None:
-        print("r_petrosian could not be computed")
+        if verbose:
+            print("r_petrosian could not be computed")
         return np.nan
 
     return r_petrosian * 2
@@ -104,5 +105,32 @@ def fraction_flux_to_r(r_list, area_list, flux_list, fraction=0.5, eta=0.2):
 
 def calculate_r_half_light(r_list, area_list, flux_list, eta=0.2):
     return fraction_flux_to_r(r_list, area_list, flux_list, fraction=0.5, eta=eta)
+
+
+def calculate_concentration_index(r_list, area_list, flux_list, ratio1=0.2, ratio2=0.8, eta=0.2):
+    r_total_flux = calculate_r_total_flux(r_list, area_list, flux_list, eta=eta)
+
+    if r_total_flux > max(r_list):
+        return None
+
+    r1 = fraction_flux_to_r(r_list, area_list, flux_list, fraction=ratio1, eta=eta)
+    r2 = fraction_flux_to_r(r_list, area_list, flux_list, fraction=ratio2, eta=eta)
+
+    if None in [r1, r2]:
+        return None
+
+    return r1, r2, 5 * np.log10(r2 / r1)
+
+
+def estimate_n(c2080pet, verbose=False):
+    n_list = [0.5, 0.75, 1, 1.5, 2, 4, 6, 8]
+    c_pet_list = [2.14, 2.49, 2.78, 3.26, 3.63, 4.50, 4.99, 5.31]
+    f = interp1d(c_pet_list, n_list, kind='cubic')
+    try:
+        return f(c2080pet)
+    except ValueError:
+        if verbose:
+            print("Could not estimate n for {}, returning closest".format(c2080pet))
+        return 0.5 if c2080pet < 2.14 else 5.31
 
 
