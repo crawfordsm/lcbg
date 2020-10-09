@@ -1,4 +1,7 @@
 KCORRECT_DIR
+data/filters/clash_acs_f435w.par
+data/filters/clash_acs_f606w.par
+data/filters/clash_acs_f814w.par
 data/filters/clash_wfc3_f105w.par
 data/filters/clash_wfc3_f125w.par
 data/filters/clash_wfc3_f140w.par
