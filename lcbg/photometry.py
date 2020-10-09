@@ -2,6 +2,8 @@ import numpy as np
 
 from astropy.modeling import models, fitting, functional_models, Parameter, custom_model
 from astropy import units as u
+from astropy.nddata import Cutout2D
+from astropy.stats import sigma_clipped_stats
 
 from matplotlib import pyplot as plt
 
@@ -13,6 +15,7 @@ from IPython.display import display
 from .utils import cutout
 from .segmentation import segm_mask, masked_segm_image
 from .fitting import plot_fit, fit_model, model_subtract, Moffat2D, Nuker2D
+from .segmentation import get_source_e,  get_source_theta, get_source_position
 
 
 def plot_apertures(image, apertures, vmin=None, vmax=None, color='white'):
@@ -41,10 +44,8 @@ def flux_to_abmag(flux, header):
     """Convert HST flux to AB Mag"""
 
     PHOTFLAM = header['PHOTFLAM']
-    PHOTFNU = header['PHOTFNU']
     PHOTZPT = header['PHOTZPT']
     PHOTPLAM = header['PHOTPLAM']
-    PHOTBW = header['PHOTBW']
 
     STMAG_ZPT = (-2.5 * np.log10(PHOTFLAM)) + PHOTZPT
     ABMAG_ZPT = STMAG_ZPT - (5. * np.log10(PHOTPLAM)) + 18.692
@@ -126,51 +127,118 @@ def radial_elliptical_annulus(position, r, dr, e=1., theta=0.):
 
     return EllipticalAnnulus(position, a_in, a_out, b_out, theta=theta)
 
-def photometry_step(position, r_list, image, e=1., theta=0., annulus_dr=5,
-                    plot=False, subtract_bg=True, return_areas=False):
 
+def photometry_step(position, r_list, image, e=1., theta=0., annulus_r=None, annulus_dr=5,
+                    subtract_bg=True, return_areas=False, bg_density=None,
+                    plot=False, vmin=0, vmax=None):
     # Estimate background
-    bg_density = None
-    if subtract_bg:
-        annulus = radial_elliptical_annulus(position, max(r_list), annulus_dr, e=e, theta=theta)
-        bg_density = annulus.do_photometry(image.data)[0][0] / annulus.area
+    annulus = None
+    if subtract_bg and bg_density is None:
+        annulus_r = annulus_r if annulus_r else max(r_list)
+        annulus = radial_elliptical_annulus(position, annulus_r, annulus_dr, e=e, theta=theta)
+        bg_density = annulus.do_photometry(image)[0][0] / annulus.area
+        bg_density = np.round(bg_density, 6)
 
     aperture_photometry_row = []
     aperture_area_row = []
 
     if plot:
-        f, ax = plt.subplots(1, 1)
-        ax.imshow(image.data, vmax=image.data.mean())
+        plt.imshow(image, vmin=vmin, vmax=image.mean() * 10 if vmax is None else vmax)
+
     for i, r in enumerate(r_list):
 
         aperture = radial_elliptical_aperture(position, r, e=e, theta=theta)
-        aperture_area = aperture.area
+        aperture_area = np.round(aperture.area, 6)
 
-        photometric_sum = aperture.do_photometry(image.data)[0][0]
+        photometric_sum = aperture.do_photometry(image)[0][0]
 
-        photometric_value = photometric_sum
-        if subtract_bg:
-            photometric_bkg = aperture_area * bg_density
-            photometric_value -= photometric_bkg
+        photometric_value = np.round(photometric_sum, 6)
 
         if np.isnan(photometric_value):
             raise Exception("Nan photometric_value")
 
+        if subtract_bg:
+            photometric_bkg = np.round(aperture_area * bg_density, 6)
+            photometric_value -= photometric_bkg
+
         if plot:
-            aperture.plot(ax, color='r')
+            aperture.plot(plt.gca(), color='w', alpha=0.5)
 
         aperture_photometry_row.append(photometric_value)
         aperture_area_row.append(aperture_area)
 
-    if plot:
-        if subtract_bg:
-            annulus.plot(ax, color='w', linestyle='--')
-        plt.show()
+    if plot and annulus is not None:
+        annulus.plot(plt.gca(), color='r', linestyle='--', alpha=0.5)
 
     if return_areas:
         return aperture_photometry_row, aperture_area_row
     else:
         return aperture_photometry_row
+
+
+def object_photometry(obj, image, segm_deblend, r_list, mean_sub=False, plot=False, vmin=0, vmax=None):
+    if plot:
+        print(obj.id)
+        fig, ax = plt.subplots(1, 2, figsize=[24, 12])
+
+    position = get_source_position(obj)
+    e = get_source_e(obj)
+    theta = get_source_theta(obj)
+
+    cutout_size = max(r_list) * 3
+
+    # Estimate mean in coutuout
+    masked_nan_image = masked_segm_image(obj, image, segm_deblend, fill=np.nan)
+    masked_nan_image = Cutout2D(masked_nan_image.data, position, cutout_size, mode='partial', fill_value=np.nan)
+    mean, median, std = sigma_clipped_stats(masked_nan_image.data, sigma=2.0, mask=np.isnan(masked_nan_image.data))
+
+    # Make coutuout
+    masked_image = masked_nan_image.data
+    if mean_sub:
+        masked_image -= mean
+
+    # Convert nan values to mean
+    idx = np.where(np.isnan(masked_image))
+    masked_image[idx] = 0  # np.random.normal(0., std, len(idx[0]))
+
+    position = np.array(masked_image.data.shape) / 2.
+
+    if plot:
+        plt.sca(ax[0])
+    aperture_photometry_row, a_list = photometry_step(position, r_list, masked_image, e=e, theta=theta,
+                                                      return_areas=True,
+                                                      plot=plot, vmin=vmin, vmax=vmax, subtract_bg=False)
+
+    if plot:
+        plt.sca(ax[1])
+        plt.plot(r_list, aperture_photometry_row, c='black', linewidth=3)
+        for r in r_list:
+            plt.axvline(r, alpha=0.5, c='r')
+        plt.show()
+
+        r = max(r_list)
+        fig, ax = plt.subplots(1, 1, figsize=[24, 6])
+        plt.plot(masked_image[:, int(position[0])], c='black', linewidth=3)
+        plt.axhline(0, c='black')
+        # plt.axhline(noise_sigma, c='b')
+        plt.axvline(position[0], linestyle='--')
+        plt.axvline(position[0] + r, alpha=0.5, c='r')
+        plt.axvline(position[0] - r, alpha=0.5, c='r')
+        plt.xlabel("Slice Along Y [pix]")
+        plt.ylabel("Flux")
+
+        fig, ax = plt.subplots(1, 1, figsize=[24, 6])
+
+        plt.plot(masked_image[int(position[1]), :], c='black', linewidth=3)
+        plt.axhline(0, c='black')
+        # plt.axhline(noise_sigma, c='b')
+        plt.axvline(position[0], linestyle='--')
+        plt.axvline(position[0] + r, alpha=0.5, c='r')
+        plt.axvline(position[0] - r, alpha=0.5, c='r')
+        plt.xlabel("Slice Along X [pix]")
+        plt.ylabel("Flux")
+
+    return aperture_photometry_row, a_list
 
 
 def remove_fitted_sources(image, image_residual, cat,
